@@ -1,4 +1,28 @@
 import streamlit as st
+
+# 添加自定义CSS改变文本颜色
+st.markdown("""
+<style>
+    body {
+        color: black !important;
+    }
+    .stMarkdown, .stText, .stTitle, .stHeader, p, h1, h2, h3, h4, h5 {
+        color: black !important;
+    }
+    /* 如需更改特定元素颜色，可添加其他选择器 */
+    .sidebar .sidebar-content {
+        color: black !important;
+    }
+    /* 确保输入框文本也是黑色 */
+    .stTextInput input, .stNumberInput input, .stSelectbox select {
+        color: black !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# 应用其余代码...
+
+import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
