@@ -82,8 +82,180 @@ def get_kline(url, start_date=None, end_date=None):
     
     return kline_df.set_index('date').sort_index()
 
+# 其他函数保持不变（t7_adjust, backtest, analyze_positions, get_risk）
+def t7_adjust(flag):
+    """t+7模式调整"""
+    for i in range(1, len(flag)):
+        if flag.iloc[i] > flag.iloc[i - 1]:
+            start = i
+        elif flag.iloc[i] < flag.iloc[i - 1] and i - start < 7:
+            flag.iloc[i] = 1
+    return flag
+
+def backtest(kline_df, k0=6.7, bias_th=0.07, sell_days=3, sell_drop_th=-0.05):
+    """回测函数，增加仓位记录和买卖信号"""
+    # 计算指标
+    ret = kline_df['close'].pct_change()
+    ma5 = kline_df['close'].rolling(5).mean()
+    ma10 = kline_df['close'].rolling(10).mean()
+    ma20 = kline_df['close'].rolling(20).mean()
+    ma30 = kline_df['close'].rolling(30).mean()
+    # 执行回测
+    pos = {}
+    ret_ls = []
+    
+    for i in range(19, len(kline_df)):
+        close = kline_df['close'].iloc[i]
+        bias = close / ma5.iloc[i] - 1
+        
+        # 计算价格跌幅
+        price_drop = 0
+        ma10_break = False
+        if i >= sell_days:
+            drop_cal = kline_df['close'].iloc[i-sell_days]
+            price_drop = close / drop_cal - 1
+            ma10_break = close < ma10.iloc[i]
+        
+        current_pos = sum(list(pos.values()))
+        buy = 0
+        sell = 0
+        sold_pos = 0
+        
+        # 买入逻辑
+        if ma5.iloc[i] > ma20.iloc[i] and close > ma10.iloc[i] and bias < bias_th:
+            if not pos:
+                pos[i] = 0.3
+                buy = 0.3
+            elif current_pos < 1:
+                pos[i] = 0.1
+                buy = 0.1
+        # 卖出逻辑
+        else:
+            # 清仓条件：3日跌幅超5%且跌破MA10
+            if i >= sell_days and price_drop < sell_drop_th and ma10_break:
+                sell_pos = current_pos  # 全额卖出
+                for k in list(pos.keys()):  # 清空所有持仓
+                    sold_pos += pos[k]
+                    del pos[k]
+            else:
+                # 保持原有止盈逻辑
+                sell_pos = current_pos * (1 - np.exp(-k0 * bias_th)) if bias >= bias_th else 0
+                for k in list(pos.keys()):
+                    if i - k >= 7:
+                        sold_pos += pos[k]
+                        del pos[k]
+                        if sold_pos >= sell_pos:
+                            break
+            
+            sell = sold_pos
+        
+        # 记录当日结果
+        ret_ls.append({
+            'date': kline_df.index[i],
+            'pos': current_pos + buy - sell,
+            'ret': (current_pos + buy - sell) * ret.iloc[i],
+            'buy': buy,
+            'sell': sell
+        })
+    
+    return pd.DataFrame(ret_ls).set_index('date')
 
 
+    """分析MA趋势及交叉，提供仓位建议"""
+    # 计算移动平均线
+    ma5 = kline_df['close'].rolling(5).mean()
+    ma10 = kline_df['close'].rolling(10).mean()
+    ma20 = kline_df['close'].rolling(20).mean()
+    ma30 = kline_df['close'].rolling(30).mean()
+
+    # 初始化信号列
+    kline_df['position_signal'] = 0  # 默认无信号
+    kline_df['signal_type'] = ''  # 信号类型描述
+    
+    # 添加MA列到DataFrame
+    kline_df['ma5'] = ma5
+    kline_df['ma10'] = ma10
+    kline_df['ma20'] = ma20
+    kline_df['ma30'] = ma30
+
+    # 判断MA30趋势和交叉信号
+    for i in range(1, len(kline_df)):
+        # 判断MA30趋势
+        ma30_trend_up = kline_df['ma30'].iloc[i] > kline_df['ma30'].iloc[i - 1]
+        
+        if ma30_trend_up:
+            # 判断MA5与MA10的交叉
+            ma5_cross_ma10 = (ma5.iloc[i] > ma10.iloc[i]) and (ma5.iloc[i - 1] <= ma10.iloc[i - 1])
+            
+            # 判断MA5与MA20的交叉
+            ma5_cross_ma20 = (ma5.iloc[i] > ma20.iloc[i]) and (ma5.iloc[i - 1] <= ma20.iloc[i - 1])
+            
+            # 设置信号
+            if ma5_cross_ma20:
+                kline_df.iloc[i, kline_df.columns.get_loc('position_signal')] = 4  # 买入4仓
+                kline_df.iloc[i, kline_df.columns.get_loc('signal_type')] = 'MA5上穿MA20，建议买入4仓'
+            elif ma5_cross_ma10:
+                kline_df.iloc[i, kline_df.columns.get_loc('position_signal')] = 2  # 买入2仓
+                kline_df.iloc[i, kline_df.columns.get_loc('signal_type')] = 'MA5上穿MA10，建议买入2仓'
+                
+    return kline_df
+
+def analyze_positions(kline_df):
+    """分析MA趋势及交叉，提供仓位建议"""
+    # 计算移动平均线
+    ma5 = kline_df['close'].rolling(5).mean()
+    ma10 = kline_df['close'].rolling(10).mean()
+    ma20 = kline_df['close'].rolling(20).mean()
+    ma30 = kline_df['close'].rolling(30).mean()
+
+    # 初始化信号列
+    kline_df['position_signal'] = 0  # 默认无信号
+    kline_df['signal_type'] = ''  # 信号类型描述
+    
+    # 添加MA列到DataFrame
+    kline_df['ma5'] = ma5
+    kline_df['ma10'] = ma10
+    kline_df['ma20'] = ma20
+    kline_df['ma30'] = ma30
+
+    # 判断MA30趋势和交叉信号
+    for i in range(1, len(kline_df)):
+        # 判断MA30趋势
+        ma30_trend_up = kline_df['ma30'].iloc[i] > kline_df['ma30'].iloc[i - 1]
+        
+        if ma30_trend_up:
+            # 判断MA5与MA10的交叉
+            ma5_cross_ma10 = (ma5.iloc[i] > ma10.iloc[i]) and (ma5.iloc[i - 1] <= ma10.iloc[i - 1])
+            
+            # 判断MA5与MA20的交叉
+            ma5_cross_ma20 = (ma5.iloc[i] > ma20.iloc[i]) and (ma5.iloc[i - 1] <= ma20.iloc[i - 1])
+            
+            # 设置信号
+            if ma5_cross_ma20:
+                kline_df.iloc[i, kline_df.columns.get_loc('position_signal')] = 4  # 买入4仓
+                kline_df.iloc[i, kline_df.columns.get_loc('signal_type')] = 'MA5上穿MA20，建议买入4仓'
+            elif ma5_cross_ma10:
+                kline_df.iloc[i, kline_df.columns.get_loc('position_signal')] = 2  # 买入2仓
+                kline_df.iloc[i, kline_df.columns.get_loc('signal_type')] = 'MA5上穿MA10，建议买入2仓'
+                
+    return kline_df
+
+def get_risk(df, num=365):
+    """计算策略收益情况"""
+    value_df = (1 + df).cumprod()
+    annual_ret = value_df.iloc[-1] ** (num / len(df)) - 1
+    vol = df.std() * np.sqrt(num)
+    sharpe = annual_ret / vol
+    max_dd = (1 - value_df / value_df.cummax()).max()
+    calmar = annual_ret / max_dd
+    return {
+        '总收益率': (value_df.iloc[-1] - 1).tolist(),
+        '年化收益': annual_ret.tolist(),
+        '波动率': vol.tolist(),
+        'Sharpe': sharpe.tolist(),
+        '最大回撤': max_dd.tolist(),
+        'Calmar': calmar.tolist()
+    }
 # 自定义CSS样式
 st.markdown("""
 <style>
