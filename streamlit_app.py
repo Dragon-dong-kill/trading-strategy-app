@@ -20,50 +20,58 @@ st.set_page_config(
 
 # 数据源库
 DATA_SOURCES = {
-    "AK47 | 血腥运动": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={}&type=2&maxTime={}&typeVal=553370749&platform=YOUPIN&specialStyle",
-    "蝴蝶刀": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={}&type=2&maxTime={}&typeVal=22779&platform=YOUPIN&specialStyle",
-    "树篱迷宫": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={}&type=2&maxTime={}&typeVal=525873303&platform=YOUPIN&specialStyle",
-    "水栽竹": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={}&type=2&maxTime={}&typeVal=24283&platform=YOUPIN&specialStyle",
-    "怪兽在b": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={}&type=2&maxTime={}&typeVal=1315999843394654208&platform=YOUPIN&specialStyle",
-    "金刚犬": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={}&type=2&maxTime={}&typeVal=1315844312734502912&platform=YOUPIN&specialStyle",
-    "tyloo": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={}&type=2&maxTime={}&typeVal=925497374167523328&platform=YOUPIN&specialStyle",
-    "迈阿密人士": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={}&type=2&maxTime={}&typeVal=808805648347430912&platform=YOUPIN&specialStyle",
+    "AK47 | 血腥运动": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=553370749&platform=YOUPIN&specialStyle",
+    "蝴蝶刀": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=22779&platform=YOUPIN&specialStyle",
+    "树篱迷宫": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=525873303&platform=YOUPIN&specialStyle",
+    "水栽竹": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=24283&platform=YOUPIN&specialStyle",
+    "怪兽在b": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=1315999843394654208&platform=YOUPIN&specialStyle",
+    "金刚犬": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=1315844312734502912&platform=YOUPIN&specialStyle",
+    "tyloo": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=925497374167523328&platform=YOUPIN&specialStyle",
+    "迈阿密人士": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=808805648347430912&platform=YOUPIN&specialStyle",
 }
 
-# 保存您的原始函数
+# 新的get_kline函数，包含成交量数据
 def get_kline(url, start_date=None, end_date=None):
-    """爬取网站K线数据（保持原始结构，增加时间范围筛选）"""
+    """爬取网站K线数据（包含成交量）"""
     kline_ls = []
     
     # 处理时间范围
-    end_ts = int(datetime.strptime(end_date, '%Y-%m-%d').timestamp()) if end_date else int(datetime.now().timestamp())
-    start_ts = int(datetime.strptime(start_date, '%Y-%m-%d').timestamp()) if start_date else 0
+    end_ts = int(datetime.now().timestamp()) if end_date is None else int(datetime.strptime(end_date, '%Y-%m-%d').timestamp())
+    start_ts = 0 if start_date is None else int(datetime.strptime(start_date, '%Y-%m-%d').timestamp())
     
-    while 1:
+    while True:
         ts = int(datetime.now().timestamp() * 1000)
         try:
-            with st.spinner(f"正在获取数据..."):
-                data = requests.get(url.format(ts, end_ts)).json()['data']
+            # 构造请求URL
+            request_url = url.format(ts, end_ts)
+            response = requests.get(request_url)
+            data = response.json()['data']
             
             if len(data) == 0:
                 break
                 
             kline_ls += data
-            end_ts = int(data[0][0]) - 86400
+            end_ts = int(data[0][0]) - 86400  # 获取前一天的数据
             
+            # 检查是否达到开始时间
             if start_date and end_ts < start_ts:
                 break
+                
         except Exception as e:
             st.error(f"获取数据出错: {e}")
+            st.caption("可能的原因包括：网络问题、数据源链接不合法或数据源暂时不可用。")
+            st.caption("建议：检查网络连接，确认数据源链接正确性，或稍后重试。")
             break
     
     if not kline_ls:
-        return pd.DataFrame(columns=['close']).set_index('date')
+        return pd.DataFrame(columns=['close', 'volume']).set_index('date')
         
-    kline_df = pd.DataFrame(kline_ls)[[0, 2]]
-    kline_df.columns = ['date', 'close']
+    # 整理数据
+    kline_df = pd.DataFrame(kline_ls)[[0, 2, 5]]
+    kline_df.columns = ['date', 'close', 'volume']
     kline_df['date'] = kline_df['date'].apply(lambda x: datetime.fromtimestamp(int(x)))
     
+    # 应用时间范围筛选
     if start_date or end_date:
         mask = True
         if start_date:
@@ -72,181 +80,9 @@ def get_kline(url, start_date=None, end_date=None):
             mask = mask & (kline_df['date'] <= datetime.strptime(end_date, '%Y-%m-%d'))
         kline_df = kline_df[mask]
     
-    return kline_df.set_index('date')[['close']].sort_index()
-
-def t7_adjust(flag):
-    """t+7模式调整"""
-    for i in range(1, len(flag)):
-        if flag.iloc[i] > flag.iloc[i - 1]:
-            start = i
-        elif flag.iloc[i] < flag.iloc[i - 1] and i - start < 7:
-            flag.iloc[i] = 1
-    return flag
-
-def backtest(kline_df, k0=6.7, bias_th=0.07, sell_days=3, sell_drop_th=-0.05):
-    """回测函数，增加仓位记录和买卖信号"""
-    # 计算指标
-    ret = kline_df['close'].pct_change()
-    ma5 = kline_df['close'].rolling(5).mean()
-    ma10 = kline_df['close'].rolling(10).mean()
-    ma20 = kline_df['close'].rolling(20).mean()
-    ma30 = kline_df['close'].rolling(30).mean()
-    # 执行回测
-    pos = {}
-    ret_ls = []
-    
-    for i in range(19, len(kline_df)):
-        close = kline_df['close'].iloc[i]
-        bias = close / ma5.iloc[i] - 1
-        
-        # 计算价格跌幅
-        price_drop = 0
-        ma10_break = False
-        if i >= sell_days:
-            drop_cal = kline_df['close'].iloc[i-sell_days]
-            price_drop = close / drop_cal - 1
-            ma10_break = close < ma10.iloc[i]
-        
-        current_pos = sum(list(pos.values()))
-        buy = 0
-        sell = 0
-        sold_pos = 0
-        
-        # 买入逻辑
-        if ma5.iloc[i] > ma20.iloc[i] and close > ma10.iloc[i] and bias < bias_th:
-            if not pos:
-                pos[i] = 0.3
-                buy = 0.3
-            elif current_pos < 1:
-                pos[i] = 0.1
-                buy = 0.1
-        # 卖出逻辑
-        else:
-            # 清仓条件：3日跌幅超5%且跌破MA10
-            if i >= sell_days and price_drop < sell_drop_th and ma10_break:
-                sell_pos = current_pos  # 全额卖出
-                for k in list(pos.keys()):  # 清空所有持仓
-                    sold_pos += pos[k]
-                    del pos[k]
-            else:
-                # 保持原有止盈逻辑
-                sell_pos = current_pos * (1 - np.exp(-k0 * bias_th)) if bias >= bias_th else 0
-                for k in list(pos.keys()):
-                    if i - k >= 7:
-                        sold_pos += pos[k]
-                        del pos[k]
-                        if sold_pos >= sell_pos:
-                            break
-            
-            sell = sold_pos
-        
-        # 记录当日结果
-        ret_ls.append({
-            'date': kline_df.index[i],
-            'pos': current_pos + buy - sell,
-            'ret': (current_pos + buy - sell) * ret.iloc[i],
-            'buy': buy,
-            'sell': sell
-        })
-    
-    return pd.DataFrame(ret_ls).set_index('date')
+    return kline_df.set_index('date').sort_index()
 
 
-    """分析MA趋势及交叉，提供仓位建议"""
-    # 计算移动平均线
-    ma5 = kline_df['close'].rolling(5).mean()
-    ma10 = kline_df['close'].rolling(10).mean()
-    ma20 = kline_df['close'].rolling(20).mean()
-    ma30 = kline_df['close'].rolling(30).mean()
-
-    # 初始化信号列
-    kline_df['position_signal'] = 0  # 默认无信号
-    kline_df['signal_type'] = ''  # 信号类型描述
-    
-    # 添加MA列到DataFrame
-    kline_df['ma5'] = ma5
-    kline_df['ma10'] = ma10
-    kline_df['ma20'] = ma20
-    kline_df['ma30'] = ma30
-
-    # 判断MA30趋势和交叉信号
-    for i in range(1, len(kline_df)):
-        # 判断MA30趋势
-        ma30_trend_up = kline_df['ma30'].iloc[i] > kline_df['ma30'].iloc[i - 1]
-        
-        if ma30_trend_up:
-            # 判断MA5与MA10的交叉
-            ma5_cross_ma10 = (ma5.iloc[i] > ma10.iloc[i]) and (ma5.iloc[i - 1] <= ma10.iloc[i - 1])
-            
-            # 判断MA5与MA20的交叉
-            ma5_cross_ma20 = (ma5.iloc[i] > ma20.iloc[i]) and (ma5.iloc[i - 1] <= ma20.iloc[i - 1])
-            
-            # 设置信号
-            if ma5_cross_ma20:
-                kline_df.iloc[i, kline_df.columns.get_loc('position_signal')] = 4  # 买入4仓
-                kline_df.iloc[i, kline_df.columns.get_loc('signal_type')] = 'MA5上穿MA20，建议买入4仓'
-            elif ma5_cross_ma10:
-                kline_df.iloc[i, kline_df.columns.get_loc('position_signal')] = 2  # 买入2仓
-                kline_df.iloc[i, kline_df.columns.get_loc('signal_type')] = 'MA5上穿MA10，建议买入2仓'
-                
-    return kline_df
-
-def analyze_positions(kline_df):
-    """分析MA趋势及交叉，提供仓位建议"""
-    # 计算移动平均线
-    ma5 = kline_df['close'].rolling(5).mean()
-    ma10 = kline_df['close'].rolling(10).mean()
-    ma20 = kline_df['close'].rolling(20).mean()
-    ma30 = kline_df['close'].rolling(30).mean()
-
-    # 初始化信号列
-    kline_df['position_signal'] = 0  # 默认无信号
-    kline_df['signal_type'] = ''  # 信号类型描述
-    
-    # 添加MA列到DataFrame
-    kline_df['ma5'] = ma5
-    kline_df['ma10'] = ma10
-    kline_df['ma20'] = ma20
-    kline_df['ma30'] = ma30
-
-    # 判断MA30趋势和交叉信号
-    for i in range(1, len(kline_df)):
-        # 判断MA30趋势
-        ma30_trend_up = kline_df['ma30'].iloc[i] > kline_df['ma30'].iloc[i - 1]
-        
-        if ma30_trend_up:
-            # 判断MA5与MA10的交叉
-            ma5_cross_ma10 = (ma5.iloc[i] > ma10.iloc[i]) and (ma5.iloc[i - 1] <= ma10.iloc[i - 1])
-            
-            # 判断MA5与MA20的交叉
-            ma5_cross_ma20 = (ma5.iloc[i] > ma20.iloc[i]) and (ma5.iloc[i - 1] <= ma20.iloc[i - 1])
-            
-            # 设置信号
-            if ma5_cross_ma20:
-                kline_df.iloc[i, kline_df.columns.get_loc('position_signal')] = 4  # 买入4仓
-                kline_df.iloc[i, kline_df.columns.get_loc('signal_type')] = 'MA5上穿MA20，建议买入4仓'
-            elif ma5_cross_ma10:
-                kline_df.iloc[i, kline_df.columns.get_loc('position_signal')] = 2  # 买入2仓
-                kline_df.iloc[i, kline_df.columns.get_loc('signal_type')] = 'MA5上穿MA10，建议买入2仓'
-                
-    return kline_df
-
-def get_risk(df, num=365):
-    """计算策略收益情况"""
-    value_df = (1 + df).cumprod()
-    annual_ret = value_df.iloc[-1] ** (num / len(df)) - 1
-    vol = df.std() * np.sqrt(num)
-    sharpe = annual_ret / vol
-    max_dd = (1 - value_df / value_df.cummax()).max()
-    calmar = annual_ret / max_dd
-    return {
-        '总收益率': (value_df.iloc[-1] - 1).tolist(),
-        '年化收益': annual_ret.tolist(),
-        '波动率': vol.tolist(),
-        'Sharpe': sharpe.tolist(),
-        '最大回撤': max_dd.tolist(),
-        'Calmar': calmar.tolist()
-    }
 
 # 自定义CSS样式
 st.markdown("""
@@ -337,6 +173,8 @@ with st.sidebar:
     show_basic = st.checkbox("5/20基本策略", value=True)
     show_extended = st.checkbox("5/20拓展策略", value=True)
     show_position_signals = st.checkbox("显示仓位建议信号", value=True)
+    show_volume = st.checkbox("显示成交量", value=True)  # 新增成交量显示选项
+    
     # 运行按钮
     run_button = st.button("运行回测", use_container_width=True)
 
@@ -351,6 +189,7 @@ if 'metrics' not in st.session_state:
     st.session_state.metrics = None
 if 'position_df' not in st.session_state:
     st.session_state.position_df = None
+
 # 运行回测
 if run_button:
     try:
@@ -369,7 +208,7 @@ if run_button:
         end_date_str = end_date.strftime('%Y-%m-%d')
         
         # 获取K线数据
-        status_text.text("正在获取K线数据...")
+        status_text.text("正在获取K线数据...（可能需要一些时间）")
         progress_bar.progress(10)
         
         kline_df = get_kline(data_url, start_date_str, end_date_str)
@@ -377,9 +216,10 @@ if run_button:
         
         if kline_df.empty:
             st.error("指定时间范围内没有K线数据，请调整日期范围")
+            st.caption("可能的原因包括：数据源无数据、网络问题或数据源链接不合法。")
             st.stop()
         
-        status_text.text(f"已获取 {len(kline_df)} 条数据记录")
+        status_text.text(f"已获取 {len(kline_df)} 条数据记录，包含价格和成交量数据")
         progress_bar.progress(40)
         
         # 计算指标
@@ -401,7 +241,7 @@ if run_button:
         
         # ma5/20策略
         flag = ((ma5 > ma20) & (kline_df['close'] > ma10)).apply(int).shift()
-        flag = t7_adjust(flag)
+        # flag = t7_adjust(flag)  # 如果需要调整T+7逻辑，可以取消注释
         ret_map['basic'] = ret * flag  # 5/20基本策略
         
         # ma5/20策略（仓位管理）
@@ -450,6 +290,8 @@ if run_button:
         
     except Exception as e:
         st.error(f"回测过程出错: {str(e)}")
+        st.caption("可能的原因包括：网络问题、数据源链接不合法或数据格式变化。")
+        st.caption("建议：检查网络连接，确认数据源链接正确性，或稍后重试。")
         st.text(traceback.format_exc())
 
 # 显示结果
@@ -462,11 +304,11 @@ if st.session_state.result_data is not None:
     bt_df = st.session_state.bt_df
     
     fig = make_subplots(
-        rows=3, cols=1, 
+        rows=4 if show_volume else 3, cols=1, 
         shared_xaxes=True,
         vertical_spacing=0.05,
-        subplot_titles=('策略累积收益', '总仓位分布', '买卖明细'),
-        row_heights=[0.5, 0.25, 0.25]
+        subplot_titles=('策略累积收益', '总仓位分布', '买卖明细') + ('成交量',) if show_volume else (),
+        row_heights=[0.4, 0.2, 0.2, 0.2] if show_volume else [0.4, 0.2, 0.2]
     )
     
     # 第一个子图：累积收益率
@@ -538,9 +380,21 @@ if st.session_state.result_data is not None:
         row=3, col=1
     )
     
+    # 如果显示成交量，添加第四个子图
+    if show_volume and st.session_state.kline_data is not None:
+        fig.add_trace(
+            go.Bar(
+                x=st.session_state.kline_data.index,
+                y=st.session_state.kline_data['volume'],
+                name='成交量',
+                marker_color='rgba(0,0,0,0.2)'
+            ),
+            row=4, col=1
+        )
+    
     # 更新布局
     fig.update_layout(
-        height=800,
+        height=1000 if show_volume else 800,
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -603,146 +457,161 @@ if st.session_state.result_data is not None:
                     <p>5/20拓展策略: {values[2]:.2%}</p>
                 </div>
                 """, unsafe_allow_html=True)
+    
     # 显示仓位建议
-if st.session_state.position_df is not None and show_position_signals:
-    st.markdown('<h2 class="sub-header">仓位建议分析</h2>', unsafe_allow_html=True)
-    
-    # 过滤出有信号的日期
-    signal_df = st.session_state.position_df[st.session_state.position_df['position_signal'] > 0]
-    
-    if not signal_df.empty:
-        # 创建带有信号标记的价格图表
-        fig_signals = make_subplots(
-            rows=1, cols=1,
-            subplot_titles=('均线趋势与交叉信号',),
-            vertical_spacing=1  # 增加垂直间距，防止标题重叠
-        )
+    if st.session_state.position_df is not None and show_position_signals:
+        st.markdown('<h2 class="sub-header">仓位建议分析</h2>', unsafe_allow_html=True)
         
-        # 更新布局，调整标题位置
-        fig_signals.update_layout(
-            height=500,
-            margin=dict(t=50),  # 增加顶部边距
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.1,
-                xanchor="right",
-                x=1
-            ),
-            template='plotly_white',
-            hovermode="x unified"
-        )
+        # 过滤出有信号的日期
+        signal_df = st.session_state.position_df[st.session_state.position_df['position_signal'] > 0]
         
-        # 添加价格
-        fig_signals.add_trace(
-            go.Scatter(
-                x=st.session_state.position_df.index,
-                y=st.session_state.position_df['close'],
-                mode='lines',
-                name='价格',
-                line=dict(color='#4E79A7', width=2)
+        if not signal_df.empty:
+            # 创建带有信号标记的价格图表
+            fig_signals = make_subplots(
+                rows=2 if show_volume else 1, cols=1,
+                subplot_titles=('均线趋势与交叉信号',) + ('成交量',) if show_volume else (),
+                vertical_spacing=0.1
             )
-        )
-        
-        # 添加MA线
-        fig_signals.add_trace(
-            go.Scatter(
-                x=st.session_state.position_df.index,
-                y=st.session_state.position_df['ma5'],
-                mode='lines',
-                name='5日均线',
-                line=dict(color='#F28E2B', width=1.5)
-            )
-        )
-        
-        fig_signals.add_trace(
-            go.Scatter(
-                x=st.session_state.position_df.index,
-                y=st.session_state.position_df['ma10'],
-                mode='lines',
-                name='10日均线',
-                line=dict(color='#59A14F', width=1.5)
-            )
-        )
-        
-        fig_signals.add_trace(
-            go.Scatter(
-                x=st.session_state.position_df.index,
-                y=st.session_state.position_df['ma20'],
-                mode='lines',
-                name='20日均线',
-                line=dict(color='#B6992D', width=1.5)
-            )
-        )
-        
-        fig_signals.add_trace(
-            go.Scatter(
-                x=st.session_state.position_df.index,
-                y=st.session_state.position_df['ma30'],
-                mode='lines',
-                name='30日均线',
-                line=dict(color='#499894', width=1.5)
-            )
-        )
-        
-        # 添加买入2仓信号
-        buy_2_df = signal_df[signal_df['position_signal'] == 2]
-        if not buy_2_df.empty:
+            
+            # 添加价格
             fig_signals.add_trace(
                 go.Scatter(
-                    x=buy_2_df.index,
-                    y=buy_2_df['close'],
-                    mode='markers',
-                    name='买入2仓信号',
-                    marker=dict(
-                        color='green',
-                        size=12,
-                        symbol='triangle-up',
-                        line=dict(color='green', width=1)
-                    )
-                )
+                    x=st.session_state.position_df.index,
+                    y=st.session_state.position_df['close'],
+                    mode='lines',
+                    name='价格',
+                    line=dict(color='#4E79A7', width=2)
+                ),
+                row=1, col=1
             )
-        
-        # 添加买入4仓信号
-        buy_4_df = signal_df[signal_df['position_signal'] == 4]
-        if not buy_4_df.empty:
+            
+            # 添加MA线
             fig_signals.add_trace(
                 go.Scatter(
-                    x=buy_4_df.index,
-                    y=buy_4_df['close'],
-                    mode='markers',
-                    name='买入4仓信号',
-                    marker=dict(
-                        color='darkgreen',
-                        size=15,
-                        symbol='triangle-up',
-                        line=dict(color='darkgreen', width=2)
-                    )
-                )
+                    x=st.session_state.position_df.index,
+                    y=st.session_state.position_df['ma5'],
+                    mode='lines',
+                    name='5日均线',
+                    line=dict(color='#F28E2B', width=1.5)
+                ),
+                row=1, col=1
             )
+            
+            fig_signals.add_trace(
+                go.Scatter(
+                    x=st.session_state.position_df.index,
+                    y=st.session_state.position_df['ma10'],
+                    mode='lines',
+                    name='10日均线',
+                    line=dict(color='#59A14F', width=1.5)
+                ),
+                row=1, col=1
+            )
+            
+            fig_signals.add_trace(
+                go.Scatter(
+                    x=st.session_state.position_df.index,
+                    y=st.session_state.position_df['ma20'],
+                    mode='lines',
+                    name='20日均线',
+                    line=dict(color='#B6992D', width=1.5)
+                ),
+                row=1, col=1
+            )
+            
+            fig_signals.add_trace(
+                go.Scatter(
+                    x=st.session_state.position_df.index,
+                    y=st.session_state.position_df['ma30'],
+                    mode='lines',
+                    name='30日均线',
+                    line=dict(color='#499894', width=1.5)
+                ),
+                row=1, col=1
+            )
+            
+            # 添加买入2仓信号
+            buy_2_df = signal_df[signal_df['position_signal'] == 2]
+            if not buy_2_df.empty:
+                fig_signals.add_trace(
+                    go.Scatter(
+                        x=buy_2_df.index,
+                        y=buy_2_df['close'],
+                        mode='markers',
+                        name='买入2仓信号',
+                        marker=dict(
+                            color='green',
+                            size=12,
+                            symbol='triangle-up',
+                            line=dict(color='green', width=1)
+                        )
+                    ),
+                    row=1, col=1
+                )
+            
+            # 添加买入4仓信号
+            buy_4_df = signal_df[signal_df['position_signal'] == 4]
+            if not buy_4_df.empty:
+                fig_signals.add_trace(
+                    go.Scatter(
+                        x=buy_4_df.index,
+                        y=buy_4_df['close'],
+                        mode='markers',
+                        name='买入4仓信号',
+                        marker=dict(
+                            color='darkgreen',
+                            size=15,
+                            symbol='triangle-up',
+                            line=dict(color='darkgreen', width=2)
+                        )
+                    ),
+                    row=1, col=1
+                )
+            
+            # 如果显示成交量，添加第二个子图
+            if show_volume and 'volume' in st.session_state.position_df.columns:
+                fig_signals.add_trace(
+                    go.Bar(
+                        x=st.session_state.position_df.index,
+                        y=st.session_state.position_df['volume'],
+                        name='成交量',
+                        marker_color='rgba(0,0,0,0.2)'
+                    ),
+                    row=2, col=1
+                )
+            
+            # 更新布局
+            fig_signals.update_layout(
+                height=600 if show_volume else 500,
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                ),
+                template='plotly_white',
+                hovermode="x unified"
+            )
+            
+            # 显示信号图表
+            st.plotly_chart(fig_signals, use_container_width=True)
+            
+            # 显示信号表格
+            st.subheader("近期仓位建议信号明细")
+            
+            # 格式化信号数据为表格
+            signal_table = signal_df.reset_index()
+            signal_table['date'] = signal_table['date'].dt.strftime('%Y-%m-%d')
+            signal_table = signal_table[['date', 'close', 'position_signal', 'signal_type']]
+            signal_table.columns = ['日期', '价格', '建议仓位', '信号类型']
+            
+            # 只展示最近的10个信号
+            st.dataframe(signal_table.tail(10).style.background_gradient(cmap='Greens', subset=['建议仓位']), height=300)
+            
+        else:
+            st.info("📌 在选定的时间范围内没有检测到仓位建议信号")
         
-        # 显示信号图表
-        st.plotly_chart(fig_signals, use_container_width=True)
-        
-        # 显示信号表格
-        st.subheader("近期仓位建议信号明细")
-        
-        # 格式化信号数据为表格
-        signal_table = signal_df.reset_index()
-        signal_table['date'] = signal_table['date'].dt.strftime('%Y-%m-%d')
-        signal_table = signal_table[['date', 'close', 'position_signal', 'signal_type']]
-        signal_table.columns = ['日期', '价格', '建议仓位', '信号类型']
-        
-        # 只展示最近的10个信号
-        st.dataframe(signal_table.tail(10).style.background_gradient(cmap='Greens', subset=['建议仓位']), height=300)
-        
-        # 使用已有的转换函数，不要重新定义
-        # 原始代码中有这个函数定义
-        
-    else:
-        st.info("📌 在选定的时间范围内没有检测到仓位建议信号")
-        
-    
     # 导出功能
     st.markdown('<h2 class="sub-header">数据导出</h2>', unsafe_allow_html=True)
     
@@ -786,3 +655,4 @@ if st.session_state.position_df is not None and show_position_signals:
 # 应用底部信息
 st.markdown("---")
 st.markdown("📊 交易策略回测工具 - 可在手机和电脑上使用的轻量级应用")
+st.caption("数据来源：OKskins API | 注意：市场有风险，投资需谨慎")
