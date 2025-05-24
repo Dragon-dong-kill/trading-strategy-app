@@ -22,12 +22,15 @@ st.set_page_config(
 DATA_SOURCES = {
     "AK47 | 血腥运动": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=553370749&platform=YOUPIN&specialStyle",
     "蝴蝶刀": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=22779&platform=YOUPIN&specialStyle",
+    "流浪者匕首op": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=553486392&platform=YOUPIN&specialStyle",
     "树篱迷宫": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=525873303&platform=YOUPIN&specialStyle",
     "水栽竹": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=24283&platform=YOUPIN&specialStyle",
     "怪兽在b": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=1315999843394654208&platform=YOUPIN&specialStyle",
     "金刚犬": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=1315844312734502912&platform=YOUPIN&specialStyle",
     "tyloo": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=925497374167523328&platform=YOUPIN&specialStyle",
+    "克拉考": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=1315936965627445248&platform=YOUPIN&specialStyle",
     "迈阿密人士": "https://sdt-api.ok-skins.com/user/steam/category/v1/kline?timestamp={};&type=2&maxTime={}&typeVal=808805648347430912&platform=YOUPIN&specialStyle",
+    
 }
 
 # 新的get_kline函数，包含成交量数据
